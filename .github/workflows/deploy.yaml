@@ -1,0 +1,50 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    # The job name must be exactly 'deploy' per your requirements
+    name: deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v3
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DO_DROPLET_IP }}
+          username: ${{ secrets.DO_DROPLET_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+
+            # 1. Pull the image you built & pushed locally to Docker Hub
+            docker pull <your-dockerhub-username>/fastapi-app:latest
+
+            # 2. Stop/remove any old container named 'fastapi-app'
+            docker rm -f fastapi-app || true
+
+            # 3. Run the new container on port 8000
+            docker run -d --name fastapi-app -p 8000:8000 <your-dockerhub-username>/fastapi-app:latest
+
+            # 4. Configure or reload Nginx to proxy to localhost:8000
+            #    (If you already have Nginx configured, you can skip rewriting the config)
+            sudo cat <<EOF > /etc/nginx/sites-available/fastapi.conf
+            server {
+                listen 80;
+                server_name ${{ secrets.DO_DROPLET_IP }}; # <--- IP from secret
+
+                location / {
+                    proxy_pass http://127.0.0.1:8000;
+                    # ...
+                }
+            }
+            EOF
+            sudo ln -sf /etc/nginx/sites-available/fastapi.conf /etc/nginx/sites-enabled/fastapi.conf
+            sudo systemctl reload nginx
+
+            echo "Deployment complete!"
