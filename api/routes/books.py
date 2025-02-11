@@ -71,9 +71,8 @@ async def delete_book(book_id: int) -> None:
 
 # New route to get a single book by its ID
 @router.get("/{book_id}")
-async def get_book(book_id: UUID):
-    book_str = str(book_id)
-    book = books_db.get(book_str)
+async def get_book(book_id: int):
+    book = db.books.get(book_id)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     return book
