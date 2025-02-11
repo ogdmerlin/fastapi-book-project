@@ -1,4 +1,4 @@
-name: Deploy to DigitalOcean
+name: Deployment
 
 on:
   push:
@@ -6,13 +6,24 @@ on:
 
 jobs:
   deploy:
-    # The job name must be exactly 'deploy' per your requirements
     name: deploy
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out the code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ogdmerlin/fastapi-app:latest
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
@@ -21,16 +32,7 @@ jobs:
           username: ${{ secrets.DO_DROPLET_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
-
-            # 1. Pull the image you built & pushed locally to Docker Hub
-            docker pull ogdmerlin/fastapi-app:v1
-
-            # 2. Stop/remove any old container named 'fastapi-app'
+            docker pull ogdmerlin/fastapi-app:latest
             docker rm -f fastapi-app || true
-
-            # 3. Run the new container on port 8000
-            docker run -d --name fastapi-app -p 8000:8000 ogdmerlin/fastapi-app:v1
-
+            docker run -d --name fastapi-app -p 8000:8000 ogdmerlin/fastapi-app:latest
             sudo systemctl reload nginx
-
-            echo "Deployment complete!"
