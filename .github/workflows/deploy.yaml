@@ -1,4 +1,4 @@
-name: Deployment
+name: Deploy to DigitalOcean
 
 on:
   push:
@@ -13,26 +13,24 @@ jobs:
       - name: Check out the code
         uses: actions/checkout@v3
 
-      # 1. Log in to Docker Hub
+      # 1. Login to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 2. Build & push Docker image with two tags:
-      #    - latest
-      #    - v<run_number> (e.g. v22)
+      # 2. Build & push Docker image using the GitHub run number as the version
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
           push: true
-          tags: |
-            # ogdmerlin/fastapi-app:latest
+          # Only one tag: v<run_number>, e.g. v42 if this is the 42nd run
+          tags: >
             ogdmerlin/fastapi-app:v${{ github.run_number }}
 
-      # 3. SSH into your Droplet and run the newly-tagged image
+      # 3. SSH to the server, pull & run the new image
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
@@ -40,19 +38,16 @@ jobs:
           username: ${{ secrets.DO_DROPLET_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
-            # We'll reference the same run_number used above
-            # to pull and run the correct version.
             VERSION=${{ github.run_number }}
 
-            # Pull the newly-pushed version tag
+            # Pull that same tag from Docker Hub
             docker pull ogdmerlin/fastapi-app:v$VERSION
 
-            # Remove old container (ignore errors if it doesn't exist)
+            # Remove any old container
             docker rm -f fastapi-app || true
 
             # Run the new container on port 8000
-            docker run -d --name fastapi-app -p 8000:8000 \
-              ogdmerlin/fastapi-app:v$VERSION
+            docker run -d --name fastapi-app -p 8000:8000 ogdmerlin/fastapi-app:v$VERSION
 
-            # Reload Nginx in case you need to re-proxy
+            # Reload Nginx if needed
             sudo systemctl reload nginx
